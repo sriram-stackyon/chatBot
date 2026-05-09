@@ -9,10 +9,12 @@ import {
   deleteThread,
   getThreadMessages,
   getThreads,
+  isLikelyImageGenerationPrompt,
   renameThread,
   streamChat,
-} from '../lib/apiClient';
-import { ChatStatus, Message, Thread } from '../types/chat';
+  uploadAttachments,
+} from '../lib/api';
+import { ApiChatAttachment, ChatStatus, Message, Thread } from '../types/chat';
 
 interface ChatPageProps {
   accessToken: string;
@@ -35,17 +37,37 @@ function toThreadModel(item: {
   };
 }
 
+function toAttachmentModel(item: ApiChatAttachment) {
+  return {
+    id: item.id,
+    threadId: item.thread_id,
+    messageId: item.message_id ?? null,
+    originalFilename: item.original_filename,
+    storedFilename: item.stored_filename,
+    storagePath: item.storage_path,
+    publicUrl: item.public_url ?? null,
+    imageUrl: item.image_url ?? null,
+    promptUsed: item.prompt_used ?? null,
+    mimeType: item.mime_type,
+    fileSize: item.file_size,
+    attachmentType: item.attachment_type,
+    createdAt: new Date(item.created_at),
+  };
+}
+
 function toMessageModel(item: {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  attachments?: ApiChatAttachment[];
 }): Message {
   return {
     id: item.id,
     role: item.role,
     content: item.content,
     timestamp: new Date(item.created_at),
+    attachments: (item.attachments ?? []).map(toAttachmentModel),
   };
 }
 
@@ -67,7 +89,7 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
   const loadMessages = useCallback(
     async (threadId: string) => {
       const data = await getThreadMessages(accessToken, threadId);
-      setMessages(data.map(toMessageModel));
+      setMessages(data.slice(-100).map(toMessageModel));
     },
     [accessToken],
   );
@@ -177,7 +199,7 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
   );
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, files: File[]) => {
       const trimmed = content.trim();
       if (!trimmed || status === 'loading' || status === 'streaming') return;
 
@@ -187,25 +209,29 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
 
         let threadId = activeThreadId;
         if (!threadId) {
-          const created = await createThread(accessToken, trimmed.slice(0, 80));
+          const created = await createThread(accessToken, (trimmed || 'New Chat').slice(0, 80));
           const mapped = toThreadModel(created);
           setThreads((prev) => [mapped, ...prev]);
           setActiveThreadId(mapped.id);
           threadId = mapped.id;
         }
 
+        const uploadedAttachments = files.length > 0 ? await uploadAttachments(accessToken, threadId, files) : [];
+
         const userMessage: Message = {
           id: uuidv4(),
           role: 'user',
           content: trimmed,
           timestamp: new Date(),
+          attachments: uploadedAttachments.map(toAttachmentModel),
         };
 
         const assistantTempId = uuidv4();
+        const isImagePrompt = isLikelyImageGenerationPrompt(trimmed);
         const assistantTemp: Message = {
           id: assistantTempId,
           role: 'assistant',
-          content: '',
+          content: isImagePrompt ? 'Generating image from your prompt...' : '',
           timestamp: new Date(),
           isStreaming: true,
         };
@@ -213,11 +239,13 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
         setMessages((prev) => [...prev, userMessage, assistantTemp]);
 
         abortRef.current = new AbortController();
+        let streamFailure: Error | null = null;
 
         await streamChat({
           token: accessToken,
           threadId,
           message: trimmed,
+          attachmentIds: uploadedAttachments.map((attachment) => attachment.id),
           signal: abortRef.current.signal,
           onChunk: (chunk) => {
             setStatus('streaming');
@@ -238,16 +266,23 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
             );
           },
           onError: (streamError) => {
+            streamFailure = streamError;
             setStatus('error');
             setError(streamError.message);
           },
         });
 
-        await loadThreads();
-        await loadMessages(threadId);
+        if (streamFailure) {
+          throw streamFailure;
+        }
+
+        setThreads((prev) =>
+          prev.map((t) => (t.id === threadId ? { ...t, updatedAt: new Date() } : t)),
+        );
       } catch (err) {
         setStatus('error');
         setError(err instanceof Error ? err.message : String(err));
+        throw err;
       }
     },
     [accessToken, activeThreadId, loadMessages, loadThreads, status],
@@ -291,7 +326,7 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
           <MessageList messages={messages} />
         </div>
 
-        <InputBar onSend={(msg) => void handleSend(msg)} onStop={stopStreaming} status={status} />
+        <InputBar onSend={handleSend} onStop={stopStreaming} status={status} />
       </main>
     </div>
   );

@@ -1,11 +1,18 @@
+from pathlib import Path
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
+from app.api.routes.export_routes import router as export_router
+from app.api.routes.rag_routes import router as rag_router
+from app.api.routes.token_routes import router as token_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.rate_limit import RateLimitMiddleware
 
 setup_logging()
 
@@ -23,8 +30,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add rate limiting middleware
+app.add_middleware(RateLimitMiddleware)
+
+upload_dir = Path(settings.UPLOAD_DIR)
+upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
+
 app.include_router(chat_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(export_router, prefix="/api")
+app.include_router(rag_router, prefix="/api")
+app.include_router(token_router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

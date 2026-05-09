@@ -3,9 +3,8 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import yaml
-from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from app.ai.llm import get_chat_llm
@@ -14,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-# Module-level chain — built once on first use
 _chat_chain: Runnable | None = None
 
 
@@ -30,8 +28,10 @@ def _build_chain() -> Runnable:
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{input}"),
+            (
+                "human",
+                "Chat History:\n{history}\n\nUser Message:\n{input}\n\nAttachment Context:\n{attachment_context}\n\nRules:\nUse attachment content only if relevant\nKeep response concise",
+            ),
         ]
     )
     llm = get_chat_llm()
@@ -48,10 +48,17 @@ def get_chat_chain() -> Runnable:
 
 async def stream_chat_response(
     user_input: str,
-    history: list[BaseMessage],
+    history: str,
+    attachment_context: str,
 ) -> AsyncIterator[str]:
     """Yield streamed text chunks from the chat chain."""
     chain = get_chat_chain()
-    async for chunk in chain.astream({"input": user_input, "history": history}):
+    async for chunk in chain.astream(
+        {
+            "input": user_input,
+            "history": history,
+            "attachment_context": attachment_context or "No attachment context.",
+        }
+    ):
         if chunk:
             yield chunk

@@ -1,3 +1,4 @@
+import hashlib
 from typing import List
 
 from pydantic import AliasChoices, Field
@@ -20,16 +21,44 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    MAX_UPLOAD_MB: int = 20
+    UPLOAD_DIR: str = "./uploads"
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # LLM (configured via existing LiteLLM env vars)
     LLM_API_BASE: str = Field(..., validation_alias="LITELLM_PROXY_URL")
-    LLM_API_KEY: str = Field(..., validation_alias="LITELLM_VIRTUAL_KEY")
+    LLM_API_KEY: str = Field(
+        ...,
+        validation_alias=AliasChoices("LITELLM_API_KEY", "LITELLM_VIRTUAL_KEY"),
+    )
     LLM_MODEL: str = Field("gemini/gemini-2.5-flash", validation_alias="LITELLM_MODEL")
     LLM_TEMPERATURE: float = Field(0.7, validation_alias="LITELLM_TEMPERATURE")
     LLM_MAX_TOKENS: int = Field(2048, validation_alias="LITELLM_MAX_TOKENS")
+    LITELLM_PROXY_URL: str = Field(..., validation_alias="LITELLM_PROXY_URL")
+    LITELLM_API_KEY: str = Field(
+        ...,
+        validation_alias=AliasChoices("LITELLM_API_KEY", "LITELLM_VIRTUAL_KEY"),
+    )
+    IMAGE_GEN_MODEL: str = Field(
+        "gemini/imagen-4.0-fast-generate-001",
+        validation_alias="IMAGE_GEN_MODEL",
+    )
+
+    # RAG Configuration
+    EMBEDDING_MODEL: str = Field("text-embedding-3-large", validation_alias="EMBEDDING_MODEL")
+    CHROMA_PERSIST_DIR: str = Field("./chroma_db", validation_alias="CHROMA_PERSIST_DIR")
+    RAG_CHUNK_SIZE: int = Field(1500, validation_alias="RAG_CHUNK_SIZE")
+    RAG_CHUNK_OVERLAP: int = Field(200, validation_alias="RAG_CHUNK_OVERLAP")
+    RAG_TOP_K: int = Field(5, validation_alias="RAG_TOP_K")
+    RAG_SCORE_THRESHOLD: float = Field(0.3, validation_alias="RAG_SCORE_THRESHOLD")
+    RAG_ENABLE_SUMMARIZATION: bool = Field(True, validation_alias="RAG_ENABLE_SUMMARIZATION")
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = Field(True, validation_alias="RATE_LIMIT_ENABLED")
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = Field(60, validation_alias="RATE_LIMIT_REQUESTS_PER_MINUTE")
+    RATE_LIMIT_TOKENS_PER_DAY: int = Field(1000000, validation_alias="RATE_LIMIT_TOKENS_PER_DAY")
 
     # Supabase
     SUPABASE_URL: str = Field(
@@ -56,13 +85,16 @@ class Settings(BaseSettings):
 
     def get_auth_secret(self) -> str:
         if self.AUTH_SECRET_KEY:
-            return self.AUTH_SECRET_KEY
+            if len(self.AUTH_SECRET_KEY.encode("utf-8")) >= 32:
+                return self.AUTH_SECRET_KEY
+            return hashlib.sha256(self.AUTH_SECRET_KEY.encode("utf-8")).hexdigest()
 
-        # Fall back to API key if dedicated auth secret is not provided.
         fallback = self.LLM_API_KEY
         if not fallback:
             raise RuntimeError("AUTH_SECRET_KEY is not configured")
-        return fallback
+        if len(fallback.encode("utf-8")) >= 32:
+            return fallback
+        return hashlib.sha256(fallback.encode("utf-8")).hexdigest()
 
     model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 

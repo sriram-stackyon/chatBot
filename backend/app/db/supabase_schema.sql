@@ -30,11 +30,41 @@ create table if not exists public.chat_messages (
     created_at timestamptz not null default now()
 );
 
+create table if not exists public.chat_attachments (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    thread_id uuid not null references public.chat_threads(id) on delete cascade,
+    message_id uuid references public.chat_messages(id) on delete cascade,
+    original_filename text not null,
+    stored_filename text not null,
+    stored_path text not null,
+    file_name text not null,
+    storage_path text not null,
+    public_url text,
+    mime_type text,
+    file_size bigint not null,
+    attachment_type text not null,
+    size_bytes bigint,
+    created_at timestamptz not null default now()
+);
+
 create index if not exists idx_chat_threads_user_updated
     on public.chat_threads(user_id, updated_at desc);
 
 create index if not exists idx_chat_messages_thread_created
     on public.chat_messages(thread_id, created_at asc);
+
+create index if not exists idx_chat_attachments_thread_created
+    on public.chat_attachments(thread_id, created_at asc);
+
+create index if not exists idx_chat_attachments_message
+    on public.chat_attachments(message_id);
+
+create index if not exists idx_chat_attachments_user_thread
+    on public.chat_attachments(user_id, thread_id, created_at asc);
+
+create index if not exists idx_chat_attachments_thread_message
+    on public.chat_attachments(thread_id, message_id, created_at asc);
 
 create or replace function public.touch_updated_at()
 returns trigger as $$

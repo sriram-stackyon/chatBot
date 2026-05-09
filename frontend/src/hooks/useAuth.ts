@@ -5,7 +5,7 @@ import {
   getMe,
   signIn as signInRequest,
   signUp as signUpRequest,
-} from '../lib/apiClient';
+} from '../lib/api';
 
 interface LocalSession {
   access_token: string;

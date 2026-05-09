@@ -15,8 +15,15 @@ def _as_sqlalchemy_psycopg_url(raw_url: str) -> str:
     return raw_url
 
 
+def _escape_for_alembic_config(raw_url: str) -> str:
+    return raw_url.replace("%", "%%")
+
+
 if settings.DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", _as_sqlalchemy_psycopg_url(settings.DATABASE_URL))
+    config.set_main_option(
+        "sqlalchemy.url",
+        _escape_for_alembic_config(_as_sqlalchemy_psycopg_url(settings.DATABASE_URL)),
+    )
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

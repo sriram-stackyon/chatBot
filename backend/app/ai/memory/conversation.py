@@ -12,3 +12,14 @@ def build_message_history(history: list[Message]) -> list[BaseMessage]:
         elif msg.role == "assistant":
             lc_messages.append(AIMessage(content=msg.content))
     return lc_messages
+
+
+def format_history_for_prompt(history: list[Message]) -> str:
+    if not history:
+        return "No prior chat history."
+
+    lines: list[str] = []
+    for msg in history:
+        speaker = "User" if msg.role == "user" else "Assistant"
+        lines.append(f"{speaker}: {msg.content}")
+    return "\n\n".join(lines)

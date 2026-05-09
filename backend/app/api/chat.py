@@ -1,12 +1,13 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user
 from app.schemas.auth import AuthUser
 from app.schemas.chat import (
+    AttachmentUploadResponse,
     ChatMessage,
     ChatRequest,
     ChatThread,
@@ -14,6 +15,7 @@ from app.schemas.chat import (
     ErrorResponse,
     UpdateThreadRequest,
 )
+from app.services.attachment_service import upload_attachments
 from app.services.chat_service import (
     create_thread,
     delete_thread,
@@ -26,6 +28,16 @@ from app.services.chat_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+
+@router.post("/chat/attachments/upload", response_model=AttachmentUploadResponse)
+async def upload_chat_attachments(
+    thread_id: str = Form(...),
+    files: list[UploadFile] = File(...),
+    current_user: AuthUser = Depends(get_current_user),
+) -> AttachmentUploadResponse:
+    attachments = await upload_attachments(current_user.user_id, thread_id, files)
+    return AttachmentUploadResponse(attachments=attachments)
 
 
 @router.get("/threads", response_model=list[ChatThread])
@@ -96,8 +108,7 @@ async def chat(
 ) -> StreamingResponse:
     async def event_generator():
         try:
-            async for chunk in process_chat_stream(current_user.user_id, request):
-                # Escape embedded newlines so SSE framing is never broken
+            async for chunk in process_chat_stream(current_user.user_id, request, current_user.email):
                 safe_chunk = chunk.replace("\n", "\\n")
                 yield f"data: {safe_chunk}\n\n"
             yield "data: [DONE]\n\n"
@@ -115,6 +126,6 @@ async def chat(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # Disable Nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )
