@@ -7,7 +7,16 @@ import {
   ApiChatAttachment,
   ApiChatMessage,
   ApiChatThread,
+  ArxivPaper,
   AuthUser,
+  GameDifficulty,
+  GameHistoryResponse,
+  GameState,
+  ResearchStreamEvent,
+  SheetPreviewResponse,
+  SheetQueryResponse,
+  SheetUploadResponse,
+  SQLChatResponse,
   UploadAttachmentsResponse,
 } from '../types/chat';
 
@@ -89,7 +98,7 @@ async function parseError(response: Response): Promise<Error> {
 
     if (value && typeof value === 'object') {
       const obj = value as Record<string, unknown>;
-      const nested = toReadableMessage(obj.detail ?? obj.error ?? obj.message);
+      const nested = toReadableMessage(obj.detail ?? obj.message ?? obj.error);
       if (nested) return nested;
 
       try {
@@ -215,6 +224,60 @@ export async function deleteThread(token: string, threadId: string): Promise<voi
   if (!response.ok) throw await parseError(response);
 }
 
+export async function querySqlChat(token: string, message: string): Promise<SQLChatResponse> {
+  const response = await fetch(`${API_BASE}/api/sql/chat`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as SQLChatResponse;
+}
+
+export async function querySheetChat(
+  token: string,
+  question: string,
+  sourceType: string,
+  sourceValue: string,
+): Promise<SheetQueryResponse> {
+  const response = await fetch(`${API_BASE}/api/sheets/query`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ question, source_type: sourceType, source_value: sourceValue }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as SheetQueryResponse;
+}
+
+export async function previewSheet(
+  token: string,
+  sourceType: string,
+  sourceValue: string,
+): Promise<SheetPreviewResponse> {
+  const response = await fetch(`${API_BASE}/api/sheets/preview`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ source_type: sourceType, source_value: sourceValue }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as SheetPreviewResponse;
+}
+
+export async function uploadSheetFile(
+  token: string,
+  file: File,
+): Promise<SheetUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/api/sheets/upload`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token),
+    body: formData,
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as SheetUploadResponse;
+}
+
 export async function uploadAttachments(
   token: string,
   threadId: string,
@@ -238,6 +301,102 @@ export async function uploadAttachments(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Research Digest Agent (Project 10) ────────────────────────────────────────
+
+export interface StreamResearchOptions {
+  token: string;
+  query: string;
+  maxPapers?: number;
+  conversationHistory?: Array<{ role: string; content: string }>;
+  onStatus: (message: string) => void;
+  onPapers: (papers: ArxivPaper[]) => void;
+  onChunk: (text: string) => void;
+  onDone: () => void;
+  onError: (err: Error) => void;
+  signal?: AbortSignal;
+}
+
+export async function streamResearch(options: StreamResearchOptions): Promise<void> {
+  const {
+    token,
+    query,
+    maxPapers = 12,
+    conversationHistory = [],
+    onStatus,
+    onPapers,
+    onChunk,
+    onDone,
+    onError,
+    signal,
+  } = options;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/research/query`, {
+      method: 'POST',
+      headers: buildHeaders(token),
+      body: JSON.stringify({
+        query,
+        max_papers: maxPapers,
+        conversation_history: conversationHistory,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+    if (!response.body) throw new Error('Empty response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+
+        let event: ResearchStreamEvent;
+        try {
+          event = JSON.parse(payload) as ResearchStreamEvent;
+        } catch {
+          continue;
+        }
+
+        if (event.type === 'status' && event.message) {
+          onStatus(event.message);
+        } else if (event.type === 'papers' && event.papers) {
+          onPapers(event.papers);
+        } else if (event.type === 'chunk' && event.text) {
+          onChunk(event.text);
+        } else if (event.type === 'done') {
+          onDone();
+          return;
+        } else if (event.type === 'error') {
+          onError(new Error(event.message ?? 'Research failed'));
+          return;
+        }
+      }
+    }
+
+    onDone();
+  } catch (err) {
+    if (signal?.aborted) {
+      onDone();
+      return;
+    }
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
@@ -317,3 +476,49 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 
   onError(lastError ?? new Error('Unknown streaming error'));
 }
+
+// ── Tic Tac Toe Game API (Project 11) ─────────────────────────────────────────
+
+export async function startGame(token: string, difficulty: GameDifficulty = 'medium'): Promise<GameState> {
+  const res = await fetch(`${API_BASE}/api/game/start`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ difficulty }),
+  });
+  if (!res.ok) throw new Error(`Start game failed: ${await res.text()}`);
+  return res.json() as Promise<GameState>;
+}
+
+export async function makeGameMove(
+  token: string,
+  game_id: string,
+  row: number,
+  col: number,
+): Promise<GameState> {
+  const res = await fetch(`${API_BASE}/api/game/move`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ game_id, row, col }),
+  });
+  if (!res.ok) throw new Error(`Move failed: ${await res.text()}`);
+  return res.json() as Promise<GameState>;
+}
+
+export async function restartGame(token: string, difficulty: GameDifficulty = 'medium'): Promise<GameState> {
+  const res = await fetch(`${API_BASE}/api/game/restart`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ difficulty }),
+  });
+  if (!res.ok) throw new Error(`Restart failed: ${await res.text()}`);
+  return res.json() as Promise<GameState>;
+}
+
+export async function getGameHistory(token: string): Promise<GameHistoryResponse> {
+  const res = await fetch(`${API_BASE}/api/game/history`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`History failed: ${await res.text()}`);
+  return res.json() as Promise<GameHistoryResponse>;
+}
+

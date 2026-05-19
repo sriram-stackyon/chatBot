@@ -22,6 +22,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Rate limiting middleware for API requests.
     Tracks requests per minute and token quota per day.
     """
+    _rate_limits_table_warned = False
+    _token_usage_table_warned = False
     
     async def dispatch(
         self,
@@ -72,40 +74,59 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check if user is within rate limits."""
         try:
             with get_db_cursor() as cursor:
+                # Rate limit checks should be resilient during partial schema rollout.
+                cursor.execute("select to_regclass('public.rate_limits') as table_name")
+                rate_limits_exists = bool((cursor.fetchone() or {}).get("table_name"))
+
                 # Check requests per minute
-                minute_ago = datetime.now() - timedelta(minutes=1)
-                cursor.execute("""
-                    select count(*) as count
-                    from public.rate_limits
-                    where user_id = %s and created_at >= %s
-                """, (user_id, minute_ago))
-                
-                row = cursor.fetchone()
-                if row and row["count"] >= settings.RATE_LIMIT_REQUESTS_PER_MINUTE:
+                if rate_limits_exists:
+                    minute_ago = datetime.now() - timedelta(minutes=1)
+                    cursor.execute("""
+                        select count(*) as count
+                        from public.rate_limits
+                        where user_id = %s and created_at >= %s
+                    """, (user_id, minute_ago))
+
+                    row = cursor.fetchone()
+                    if row and row["count"] >= settings.RATE_LIMIT_REQUESTS_PER_MINUTE:
+                        logger.warning(
+                            "Rate limit exceeded for user=%s (requests/min)",
+                            user_id,
+                        )
+                        return False
+                elif not RateLimitMiddleware._rate_limits_table_warned:
                     logger.warning(
-                        "Rate limit exceeded for user=%s (requests/min)",
-                        user_id,
+                        "Skipping request/minute limit because public.rate_limits table is missing"
                     )
-                    return False
+                    RateLimitMiddleware._rate_limits_table_warned = True
                 
                 # Check token quota per day
-                day_ago = datetime.now() - timedelta(days=1)
-                cursor.execute("""
-                    select coalesce(sum(tokens_used), 0) as total
-                    from public.token_usage
-                    where user_id = %s and created_at >= %s
-                """, (user_id, day_ago))
-                
-                row = cursor.fetchone()
-                if row and row["total"] >= settings.RATE_LIMIT_TOKENS_PER_DAY:
+                cursor.execute("select to_regclass('public.token_usage') as table_name")
+                token_usage_exists = bool((cursor.fetchone() or {}).get("table_name"))
+
+                if token_usage_exists:
+                    day_ago = datetime.now() - timedelta(days=1)
+                    cursor.execute("""
+                        select coalesce(sum(tokens_used), 0) as total
+                        from public.token_usage
+                        where user_id = %s and created_at >= %s
+                    """, (user_id, day_ago))
+
+                    row = cursor.fetchone()
+                    if row and row["total"] >= settings.RATE_LIMIT_TOKENS_PER_DAY:
+                        logger.warning(
+                            "Token quota exceeded for user=%s (tokens/day)",
+                            user_id,
+                        )
+                        return False
+                elif not RateLimitMiddleware._token_usage_table_warned:
                     logger.warning(
-                        "Token quota exceeded for user=%s (tokens/day)",
-                        user_id,
+                        "Skipping tokens/day limit because public.token_usage table is missing"
                     )
-                    return False
+                    RateLimitMiddleware._token_usage_table_warned = True
                 
                 return True
-        except Exception as e:
+        except Exception:
             logger.exception("Error checking rate limits for user=%s", user_id)
             # Fail open - don't block if check fails
             return True
@@ -132,5 +153,5 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     insert into public.rate_limits(user_id, method, path)
                     values (%s, %s, %s)
                 """, (user_id, request.method, request.url.path))
-        except Exception as e:
+        except Exception:
             logger.exception("Error logging rate limit request for user=%s", user_id)

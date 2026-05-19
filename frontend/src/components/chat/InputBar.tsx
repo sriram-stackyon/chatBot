@@ -63,6 +63,34 @@ export function InputBar({ onSend, onStop, status }: Props) {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, []);
 
+  const activateDbQueryTool = useCallback(() => {
+    setInput((prev) => {
+      if (prev.trim().toLowerCase().startsWith('/sql')) {
+        return prev;
+      }
+      return prev.trim().length > 0 ? `/sql ${prev}` : '/sql ';
+    });
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      autoResize();
+    });
+  }, [autoResize]);
+
+  const activateSheetQueryTool = useCallback(() => {
+    setInput((prev) => {
+      if (prev.trim().toLowerCase().startsWith('/sheet')) {
+        return prev;
+      }
+      return '/sheet ';
+    });
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      autoResize();
+    });
+  }, [autoResize]);
+
   return (
     <div className="input-bar">
       <AttachmentPreview
@@ -72,7 +100,12 @@ export function InputBar({ onSend, onStop, status }: Props) {
         onRemove={removeFile}
       />
       <div className="input-row">
-        <AttachmentButton disabled={isActive} onFilesSelected={appendFiles} />
+        <AttachmentButton
+          disabled={isActive}
+          onFilesSelected={appendFiles}
+          onDbQueryClick={activateDbQueryTool}
+          onSheetQueryClick={activateSheetQueryTool}
+        />
         <textarea
           ref={textareaRef}
           className="input-textarea"

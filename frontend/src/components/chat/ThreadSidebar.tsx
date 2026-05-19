@@ -44,6 +44,9 @@ interface Props {
   onRenameThread: (id: string, title: string) => void;
   userLabel: string;
   onSignOut: () => void;
+  onOpenSheetAgent: () => void;
+  onOpenResearchAgent: () => void;
+  onOpenTicTacToe: () => void;
 }
 
 export function ThreadSidebar({
@@ -55,6 +58,9 @@ export function ThreadSidebar({
   onRenameThread,
   userLabel,
   onSignOut,
+  onOpenSheetAgent,
+  onOpenResearchAgent,
+  onOpenTicTacToe,
 }: Props) {
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -156,10 +162,23 @@ export function ThreadSidebar({
       </div>
 
       <div className="sidebar-footer">
-        <span className="sidebar-user">{userLabel}</span>
-        <button className="btn-signout" type="button" onClick={onSignOut}>
-          Sign out
-        </button>
+        <div className="sidebar-footer-actions">
+          <button className="btn-sheet-agent" type="button" onClick={onOpenSheetAgent}>
+            Sheet
+          </button>
+          <button className="btn-research-agent" type="button" onClick={onOpenResearchAgent}>
+            Research
+          </button>
+          <button className="btn-tictactoe" type="button" onClick={onOpenTicTacToe}>
+            🎮 Game
+          </button>
+        </div>
+        <div className="sidebar-footer-user">
+          <span className="sidebar-user">{userLabel}</span>
+          <button className="btn-signout" type="button" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </aside>
   );

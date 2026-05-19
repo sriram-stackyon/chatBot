@@ -35,3 +35,19 @@ frontend/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# Backend build, cache, and uploads
+backend/chroma_db/
+backend/uploads/
+backend/alembic/versions/__pycache__/
+backend/app/**/__pycache__/
+backend/tests/**/__pycache__/
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+
+# System files
+*.swp
+*.swo
+*.bak
+*.tmp

@@ -1,8 +1,21 @@
 import hashlib
+import json
+import os
+from pathlib import Path
 from typing import List
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, computed_field
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+# Explicitly load .env using an absolute path so hot-reload subprocesses find it
+# regardless of their working directory. os.path.abspath handles relative __file__.
+_backend_dir = Path(os.path.abspath(__file__)).parent.parent.parent  # .../backend
+_dotenv_path = _backend_dir / ".env"
+if _dotenv_path.is_file():
+    from dotenv import load_dotenv as _load_dotenv
+    # encoding='utf-8-sig' strips the BOM (\ufeff) that Windows editors add
+    _load_dotenv(_dotenv_path, encoding="utf-8-sig", override=False)
 
 
 class Settings(BaseSettings):
@@ -21,8 +34,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    GOOGLE_SERVICE_ACCOUNT_JSON: str = Field("", validation_alias="GOOGLE_SERVICE_ACCOUNT_JSON")
     MAX_UPLOAD_MB: int = 20
     UPLOAD_DIR: str = "./uploads"
+    SHEETS_MAX_ROWS: int = Field(5000, validation_alias="SHEETS_MAX_ROWS")
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -36,11 +51,17 @@ class Settings(BaseSettings):
     LLM_MODEL: str = Field("gemini/gemini-2.5-flash", validation_alias="LITELLM_MODEL")
     LLM_TEMPERATURE: float = Field(0.7, validation_alias="LITELLM_TEMPERATURE")
     LLM_MAX_TOKENS: int = Field(2048, validation_alias="LITELLM_MAX_TOKENS")
-    LITELLM_PROXY_URL: str = Field(..., validation_alias="LITELLM_PROXY_URL")
-    LITELLM_API_KEY: str = Field(
-        ...,
-        validation_alias=AliasChoices("LITELLM_API_KEY", "LITELLM_VIRTUAL_KEY"),
-    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def LITELLM_PROXY_URL(self) -> str:
+        return self.LLM_API_BASE
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def LITELLM_API_KEY(self) -> str:
+        return self.LLM_API_KEY
+
     IMAGE_GEN_MODEL: str = Field(
         "gemini/imagen-4.0-fast-generate-001",
         validation_alias="IMAGE_GEN_MODEL",
@@ -59,6 +80,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = Field(True, validation_alias="RATE_LIMIT_ENABLED")
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = Field(60, validation_alias="RATE_LIMIT_REQUESTS_PER_MINUTE")
     RATE_LIMIT_TOKENS_PER_DAY: int = Field(1000000, validation_alias="RATE_LIMIT_TOKENS_PER_DAY")
+
+    # SQL Agent
+    SQL_AGENT_TABLES: List[str] = Field(default_factory=list, validation_alias="SQL_AGENT_TABLES")
 
     # Supabase
     SUPABASE_URL: str = Field(
@@ -96,7 +120,31 @@ class Settings(BaseSettings):
             return fallback
         return hashlib.sha256(fallback.encode("utf-8")).hexdigest()
 
-    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
+    @field_validator("SQL_AGENT_TABLES", mode="before")
+    @classmethod
+    def _parse_sql_agent_tables(cls, value: object) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+
+            # Support JSON-style arrays in .env, e.g. ["table_a","table_b"]
+            if raw.startswith("[") and raw.endswith("]"):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+
+            return [item.strip().strip('"').strip("'") for item in raw.split(",") if item.strip()]
+        return []
+
+    model_config = {"case_sensitive": True, "extra": "ignore"}
 
 
 settings = Settings()

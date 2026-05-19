@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
+import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 
 import { Message } from '../../types/chat';
@@ -23,7 +26,7 @@ interface ComparisonTableData {
 
 interface MessageParts {
   beforeTable: string;
-  table?: ComparisonTableData;
+  comparisonTable?: ComparisonTableData;
   afterTable: string;
 }
 
@@ -31,22 +34,26 @@ function formatMessageTime(value: Date): string {
   return value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function parseMessageForTable(content: string): MessageParts {
-  const tableRegex = /\[COMPARISON_TABLE\]([\s\S]*?)\[\/COMPARISON_TABLE\]/;
-  const match = content.match(tableRegex);
+const markdownComponents: Components = {
+  table: ({ children }) => (
+    <div className="sheet-table-scroll">
+      <table>{children}</table>
+    </div>
+  ),
+};
 
-  if (!match) {
+function parseMessageParts(content: string): MessageParts {
+  const compRegex = /\[COMPARISON_TABLE\]([\s\S]*?)\[\/COMPARISON_TABLE\]/;
+  const compMatch = content.match(compRegex);
+  if (!compMatch) {
     return { beforeTable: content, afterTable: '' };
   }
-
-  const beforeTable = content.substring(0, match.index);
-  const afterTable = content.substring(match.index! + match[0].length);
-
+  const beforeTable = content.substring(0, compMatch.index);
+  const afterTable = content.substring(compMatch.index! + compMatch[0].length);
   try {
-    const tableData: ComparisonTableData = JSON.parse(match[1]);
-    return { beforeTable, table: tableData, afterTable };
+    const tableData: ComparisonTableData = JSON.parse(compMatch[1]);
+    return { beforeTable, comparisonTable: tableData, afterTable };
   } catch {
-    // If JSON parsing fails, treat as regular content
     return { beforeTable: content, afterTable: '' };
   }
 }
@@ -78,7 +85,7 @@ export function MessageList({ messages }: Props) {
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user';
-  const messageParts = isUser ? { beforeTable: message.content, afterTable: '' } : parseMessageForTable(message.content);
+  const messageParts = isUser ? { beforeTable: message.content, afterTable: '' } : parseMessageParts(message.content);
 
   return (
     <div className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
@@ -95,18 +102,34 @@ function MessageBubble({ message }: { message: Message }) {
           ) : (
             <>
               {messageParts.beforeTable && (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageParts.beforeTable}</ReactMarkdown>
+                <div className="message-assistant-summary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{messageParts.beforeTable}</ReactMarkdown>
+                </div>
               )}
-              {messageParts.table && (
+              {message.intermediateSql && (
+                <div className="sql-query-panel">
+                  <div className="sql-query-title">SQL Query</div>
+                  <SyntaxHighlighter
+                    language="sql"
+                    style={oneDark}
+                    customStyle={{ margin: '8px 0 0', borderRadius: '10px' }}
+                  >
+                    {message.intermediateSql}
+                  </SyntaxHighlighter>
+                </div>
+              )}
+              {messageParts.comparisonTable && (
                 <ComparisonTable
-                  title={messageParts.table.title}
-                  leftHeader={messageParts.table.leftHeader}
-                  rightHeader={messageParts.table.rightHeader}
-                  rows={messageParts.table.rows}
+                  title={messageParts.comparisonTable.title}
+                  leftHeader={messageParts.comparisonTable.leftHeader}
+                  rightHeader={messageParts.comparisonTable.rightHeader}
+                  rows={messageParts.comparisonTable.rows}
                 />
               )}
               {messageParts.afterTable && (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageParts.afterTable}</ReactMarkdown>
+                <div className="message-assistant-summary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{messageParts.afterTable}</ReactMarkdown>
+                </div>
               )}
             </>
           )}
@@ -120,3 +143,4 @@ function MessageBubble({ message }: { message: Message }) {
     </div>
   );
 }
+

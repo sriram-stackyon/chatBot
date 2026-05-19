@@ -10,16 +10,21 @@ import {
   getThreadMessages,
   getThreads,
   isLikelyImageGenerationPrompt,
+  querySheetChat,
+  querySqlChat,
   renameThread,
   streamChat,
   uploadAttachments,
 } from '../lib/api';
-import { ApiChatAttachment, ChatStatus, Message, Thread } from '../types/chat';
+import { ApiChatAttachment, ChatStatus, Message, SheetQueryResponse, Thread } from '../types/chat';
 
 interface ChatPageProps {
   accessToken: string;
   userEmail: string;
   onSignOut: () => Promise<void>;
+  onOpenSheetAgent: () => void;
+  onOpenResearchAgent: () => void;
+  onOpenTicTacToe: () => void;
 }
 
 function toThreadModel(item: {
@@ -71,7 +76,7 @@ function toMessageModel(item: {
   };
 }
 
-export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
+export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, onOpenResearchAgent, onOpenTicTacToe }: ChatPageProps) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -217,6 +222,22 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
         }
 
         const uploadedAttachments = files.length > 0 ? await uploadAttachments(accessToken, threadId, files) : [];
+        const sqlCommandPrefix = '/sql';
+        const isSqlQuery = trimmed.toLowerCase().startsWith(`${sqlCommandPrefix} `);
+        const sqlQuestion = isSqlQuery ? trimmed.slice(sqlCommandPrefix.length).trim() : '';
+
+        const sheetCommandPrefix = '/sheet';
+        const isSheetQuery = trimmed.toLowerCase().startsWith(`${sheetCommandPrefix} `);
+        const sheetArgs = isSheetQuery ? trimmed.slice(sheetCommandPrefix.length).trim() : '';
+        // Split on first whitespace (space or newline) — first token is source, rest is question
+        const sheetTokenMatch = sheetArgs.match(/^(\S+)\s+([\s\S]+)$/);
+        const sheetSource = sheetTokenMatch ? sheetTokenMatch[1].trim() : sheetArgs.trim();
+        const sheetQuestion = sheetTokenMatch ? sheetTokenMatch[2].trim() : '';
+        function detectSourceType(value: string): string {
+          if (value.includes('docs.google.com/spreadsheets')) return 'gsheet';
+          if (value.toLowerCase().endsWith('.xlsx')) return 'xlsx';
+          return 'csv';
+        }
 
         const userMessage: Message = {
           id: uuidv4(),
@@ -237,6 +258,60 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
         };
 
         setMessages((prev) => [...prev, userMessage, assistantTemp]);
+
+        if (isSqlQuery) {
+          if (!sqlQuestion) {
+            throw new Error('Please provide a SQL question after /sql.');
+          }
+
+          const sqlResponse = await querySqlChat(accessToken, sqlQuestion);
+          setStatus('idle');
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantTempId
+                ? {
+                    ...msg,
+                    content: sqlResponse.content,
+                    intermediateSql: sqlResponse.intermediate_sql ?? null,
+                    isStreaming: false,
+                  }
+                : msg,
+            ),
+          );
+
+          setThreads((prev) =>
+            prev.map((t) => (t.id === threadId ? { ...t, updatedAt: new Date() } : t)),
+          );
+          return;
+        }
+
+        if (isSheetQuery) {
+          if (!sheetSource || !sheetQuestion) {
+            throw new Error('Usage: /sheet <url_or_filepath> <question>');
+          }
+          const sourceType = detectSourceType(sheetSource);
+          const sheetResponse: SheetQueryResponse = await querySheetChat(
+            accessToken,
+            sheetQuestion,
+            sourceType,
+            sheetSource,
+          );
+
+          const sheetContent = sheetResponse.content;
+
+          setStatus('idle');
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantTempId
+                ? { ...msg, content: sheetContent, isStreaming: false }
+                : msg,
+            ),
+          );
+          setThreads((prev) =>
+            prev.map((t) => (t.id === threadId ? { ...t, updatedAt: new Date() } : t)),
+          );
+          return;
+        }
 
         abortRef.current = new AbortController();
         let streamFailure: Error | null = null;
@@ -280,8 +355,17 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
           prev.map((t) => (t.id === threadId ? { ...t, updatedAt: new Date() } : t)),
         );
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
         setStatus('error');
-        setError(err instanceof Error ? err.message : String(err));
+        setError(errorMessage);
+        // Stop any assistant message stuck in loading/streaming state
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.isStreaming
+              ? { ...msg, isStreaming: false, content: msg.content || `⚠ ${errorMessage}` }
+              : msg,
+          ),
+        );
         throw err;
       }
     },
@@ -313,6 +397,9 @@ export function ChatPage({ accessToken, userEmail, onSignOut }: ChatPageProps) {
         onSignOut={() => {
           void onSignOut();
         }}
+        onOpenSheetAgent={onOpenSheetAgent}
+        onOpenResearchAgent={onOpenResearchAgent}
+        onOpenTicTacToe={onOpenTicTacToe}
       />
 
       <main className="chat-main">
