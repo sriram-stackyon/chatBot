@@ -46,6 +46,7 @@ interface Props {
   onSignOut: () => void;
   onOpenSheetAgent: () => void;
   onOpenResearchAgent: () => void;
+  onOpenResearchMcp: () => void;
   onOpenTicTacToe: () => void;
 }
 
@@ -60,6 +61,7 @@ export function ThreadSidebar({
   onSignOut,
   onOpenSheetAgent,
   onOpenResearchAgent,
+  onOpenResearchMcp,
   onOpenTicTacToe,
 }: Props) {
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -168,6 +170,9 @@ export function ThreadSidebar({
           </button>
           <button className="btn-research-agent" type="button" onClick={onOpenResearchAgent}>
             Research
+          </button>
+          <button className="btn-research-mcp" type="button" onClick={onOpenResearchMcp}>
+            Research MCP
           </button>
           <button className="btn-tictactoe" type="button" onClick={onOpenTicTacToe}>
             🎮 Game

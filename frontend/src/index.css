@@ -1449,6 +1449,36 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   Research MCP button in sidebar (Project 12)
+══════════════════════════════════════════════════════════════════ */
+
+.btn-research-mcp {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 34px;
+  background: rgba(20, 120, 80, 0.18);
+  border: 1px solid rgba(50, 200, 130, 0.4);
+  border-radius: 8px;
+  color: #6ee7b7;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-research-mcp:hover {
+  background: rgba(20, 120, 80, 0.32);
+  border-color: rgba(50, 200, 130, 0.65);
+}
+
+/* ══════════════════════════════════════════════════════════════════
    Research Agent Page  (.ra-*)
 ══════════════════════════════════════════════════════════════════ */
 
@@ -1506,6 +1536,20 @@ body {
   font-weight: 600;
   color: #c8d8f0;
   letter-spacing: 0.01em;
+}
+
+.ra-mcp-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: rgba(20, 120, 80, 0.25);
+  border: 1px solid rgba(50, 200, 130, 0.5);
+  border-radius: 12px;
+  color: #6ee7b7;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .ra-topbar-user {
@@ -1650,6 +1694,11 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
+}
+
+/* MCP variant — green gradient to distinguish from tool-based agent */
+.ra-research-btn-mcp {
+  background: linear-gradient(135deg, #0d7a52, #0a9960);
 }
 
 .ra-stop-btn {

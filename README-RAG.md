@@ -396,3 +396,98 @@ npm run dev
 - **Configuration**: See `.env.example` for all available settings
 - **Logging**: Check backend console/logs for detailed errors
 - **Token Usage**: `GET /api/tokens/usage/stats` for monitoring
+
+---
+
+## Project 12 — MCP-based Research Digest Agent
+
+### Overview
+
+Project 12 adds a second Research Digest Agent that is architecturally identical to the existing Project 10 agent but replaces the hand-written arXiv Python functions with **MCP (Model Context Protocol) server tools**. This demonstrates that the LangGraph orchestration layer, system prompt, and frontend are fully decoupled from the tool implementation — only the tool transport layer changes.
+
+### Architecture
+
+```
+Frontend (ResearchMcpPage)
+   ↓  SSE stream
+FastAPI  /api/research-mcp/query
+   ↓
+research_mcp_agent.py  (LangGraph workflow — identical to Project 10)
+   ↓  MCP tool calls
+mcp_client.py  (MCP stdio client)
+   ↓  stdio transport
+mcp_servers/arxiv_server.py  (MCP server process)
+   ↓  arxiv Python package
+arXiv API
+```
+
+### How it differs from Project 10
+
+| Aspect | Project 10 (Tool-based) | Project 12 (MCP-based) |
+|---|---|---|
+| arXiv calls | Direct Python function `search_papers()` | MCP tool call via `mcp_search_arxiv()` |
+| Transport | In-process function call | stdio subprocess (MCP protocol) |
+| Tool discovery | Hard-coded | MCP `list_tools()` |
+| LangGraph graph | `research_agent.py` | `research_mcp_agent.py` |
+| API endpoint | `POST /api/research/query` | `POST /api/research-mcp/query` |
+| Frontend page | `ResearchAgentPage.tsx` | `ResearchMcpPage.tsx` |
+| Sidebar button | "Research" (purple) | "Research MCP" (green) |
+
+### MCP server: `mcp_servers/arxiv_server.py`
+
+A lightweight MCP server wrapping the `arxiv` Python package. Exposes two tools:
+
+- **`search_arxiv(query, max_results)`** — search arXiv and return paper metadata
+- **`get_paper_details(arxiv_id)`** — fetch full metadata for one paper
+
+**Run manually (for testing):**
+```bash
+cd backend
+python -m mcp_servers.arxiv_server
+```
+
+### MCP client: `app/services/mcp_client.py`
+
+Connects to the arXiv MCP server via stdio transport. Manages:
+- `StdioServerParameters` construction from `.env` settings
+- Session initialization and tool invocation
+- JSON response parsing
+- 3-attempt retry with timeout
+
+### New environment variables (`.env`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_ARXIV_TRANSPORT` | `stdio` | Transport type (`stdio` or `sse`) |
+| `MCP_ARXIV_COMMAND` | `python` | Executable to launch the MCP server |
+| `MCP_ARXIV_HOST` | `localhost` | SSE host (unused in stdio mode) |
+| `MCP_ARXIV_PORT` | `8100` | SSE port (unused in stdio mode) |
+| `MCP_RETRY_ATTEMPTS` | `3` | MCP tool call retry count |
+
+### Files added
+
+| File | Purpose |
+|---|---|
+| `backend/mcp_servers/__init__.py` | Package init |
+| `backend/mcp_servers/arxiv_server.py` | MCP server exposing arXiv tools |
+| `backend/app/services/mcp_client.py` | MCP stdio client |
+| `backend/app/ai/agents/research_mcp_agent.py` | LangGraph agent using MCP tools |
+| `backend/app/api/research_mcp.py` | FastAPI SSE endpoint |
+| `backend/tests/services/test_research_mcp.py` | 12 unit tests |
+| `frontend/src/pages/ResearchMcpPage.tsx` | Frontend page (MCP-labeled) |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `backend/main.py` | Register `research_mcp_router` |
+| `backend/app/core/config.py` | Add MCP settings |
+| `backend/requirements.txt` | Add `mcp>=1.0.0` |
+| `backend/.env.example` | Document MCP env vars |
+| `backend/pytest.ini` | Created with `asyncio_mode=auto` |
+| `frontend/src/App.tsx` | Add `research-mcp` view |
+| `frontend/src/pages/ChatPage.tsx` | Add `onOpenResearchMcp` prop |
+| `frontend/src/components/chat/ThreadSidebar.tsx` | Add "Research MCP" button |
+| `frontend/src/lib/api.ts` | Add `streamResearchMcp()` |
+| `frontend/src/index.css` | Add MCP button/badge styles |
+

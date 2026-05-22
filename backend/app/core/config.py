@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     # SQL Agent
     SQL_AGENT_TABLES: List[str] = Field(default_factory=list, validation_alias="SQL_AGENT_TABLES")
 
+    # MCP arXiv server (Project 12) — public cyanheads/arxiv-mcp-server via Streamable HTTP
+    MCP_ARXIV_URL: str = Field(
+        "https://arxiv.caseyjhand.com/mcp",
+        validation_alias="MCP_ARXIV_URL",
+    )
+    MCP_RETRY_ATTEMPTS: int = Field(3, validation_alias="MCP_RETRY_ATTEMPTS")
+
     # Supabase
     SUPABASE_URL: str = Field(
         "",

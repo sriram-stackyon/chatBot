@@ -399,6 +399,102 @@ export async function streamResearch(options: StreamResearchOptions): Promise<vo
   }
 }
 
+// ── Research Digest Agent — MCP-powered (Project 12) ─────────────────────────
+
+export interface StreamResearchMcpOptions {
+  token: string;
+  query: string;
+  maxPapers?: number;
+  conversationHistory?: Array<{ role: string; content: string }>;
+  onStatus: (message: string) => void;
+  onPapers: (papers: ArxivPaper[]) => void;
+  onChunk: (text: string) => void;
+  onDone: () => void;
+  onError: (err: Error) => void;
+  signal?: AbortSignal;
+}
+
+export async function streamResearchMcp(options: StreamResearchMcpOptions): Promise<void> {
+  const {
+    token,
+    query,
+    maxPapers = 12,
+    conversationHistory = [],
+    onStatus,
+    onPapers,
+    onChunk,
+    onDone,
+    onError,
+    signal,
+  } = options;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/research-mcp/query`, {
+      method: 'POST',
+      headers: buildHeaders(token),
+      body: JSON.stringify({
+        query,
+        max_papers: maxPapers,
+        conversation_history: conversationHistory,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+    if (!response.body) throw new Error('Empty response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+
+        let event: ResearchStreamEvent;
+        try {
+          event = JSON.parse(payload) as ResearchStreamEvent;
+        } catch {
+          continue;
+        }
+
+        if (event.type === 'status' && event.message) {
+          onStatus(event.message);
+        } else if (event.type === 'papers' && event.papers) {
+          onPapers(event.papers);
+        } else if (event.type === 'chunk' && event.text) {
+          onChunk(event.text);
+        } else if (event.type === 'done') {
+          onDone();
+          return;
+        } else if (event.type === 'error') {
+          onError(new Error(event.message ?? 'Research MCP failed'));
+          return;
+        }
+      }
+    }
+
+    onDone();
+  } catch (err) {
+    if (signal?.aborted) {
+      onDone();
+      return;
+    }
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 export async function streamChat(options: StreamChatOptions): Promise<void> {
   const { token, threadId, message, attachmentIds = [], onChunk, onDone, onError, signal } = options;
   let lastError: Error | null = null;

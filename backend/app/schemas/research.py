@@ -10,5 +10,5 @@ class ConversationMessage(BaseModel):
 
 class ResearchQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
-    max_papers: int = Field(12, ge=3, le=20)
+    max_papers: int = Field(8, ge=3, le=20)
     conversation_history: list[ConversationMessage] = Field(default_factory=list)

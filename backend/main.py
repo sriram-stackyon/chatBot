@@ -9,6 +9,7 @@ from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.game import router as game_router
 from app.api.research import router as research_router
+from app.api.research_mcp import router as research_mcp_router
 from app.api.sheets import router as sheets_router
 from app.api.sql_chat import router as sql_chat_router
 from app.api.routes.export_routes import router as export_router
@@ -46,6 +47,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(sql_chat_router, prefix="/api")
 app.include_router(sheets_router, prefix="/api")
 app.include_router(research_router, prefix="/api")
+app.include_router(research_mcp_router, prefix="/api")
 app.include_router(game_router, prefix="/api")
 app.include_router(export_router, prefix="/api")
 app.include_router(rag_router, prefix="/api")

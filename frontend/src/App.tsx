@@ -4,10 +4,11 @@ import { AuthPanel } from './components/auth/AuthPanel';
 import { useAuth } from './hooks/useAuth';
 import { ChatPage } from './pages/ChatPage';
 import { ResearchAgentPage } from './pages/ResearchAgentPage';
+import { ResearchMcpPage } from './pages/ResearchMcpPage';
 import { SheetAgentPage } from './pages/SheetAgentPage';
 import { TicTacToePage } from './pages/TicTacToePage';
 
-type AppView = 'chat' | 'sheets' | 'research' | 'tictactoe';
+type AppView = 'chat' | 'sheets' | 'research' | 'research-mcp' | 'tictactoe';
 
 export default function App() {
   const { session, loading, error, signIn, signUp, signInWithGoogle, signOut } = useAuth();
@@ -50,6 +51,16 @@ export default function App() {
     );
   }
 
+  if (view === 'research-mcp') {
+    return (
+      <ResearchMcpPage
+        accessToken={session.access_token}
+        userEmail={email}
+        onBack={() => setView('chat')}
+      />
+    );
+  }
+
   if (view === 'tictactoe') {
     return (
       <TicTacToePage
@@ -67,6 +78,7 @@ export default function App() {
       onSignOut={signOut}
       onOpenSheetAgent={() => setView('sheets')}
       onOpenResearchAgent={() => setView('research')}
+      onOpenResearchMcp={() => setView('research-mcp')}
       onOpenTicTacToe={() => setView('tictactoe')}
     />
   );

@@ -24,6 +24,7 @@ interface ChatPageProps {
   onSignOut: () => Promise<void>;
   onOpenSheetAgent: () => void;
   onOpenResearchAgent: () => void;
+  onOpenResearchMcp: () => void;
   onOpenTicTacToe: () => void;
 }
 
@@ -76,7 +77,7 @@ function toMessageModel(item: {
   };
 }
 
-export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, onOpenResearchAgent, onOpenTicTacToe }: ChatPageProps) {
+export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, onOpenResearchAgent, onOpenResearchMcp, onOpenTicTacToe }: ChatPageProps) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -399,6 +400,7 @@ export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, 
         }}
         onOpenSheetAgent={onOpenSheetAgent}
         onOpenResearchAgent={onOpenResearchAgent}
+        onOpenResearchMcp={onOpenResearchMcp}
         onOpenTicTacToe={onOpenTicTacToe}
       />
 
