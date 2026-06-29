@@ -48,6 +48,7 @@ interface Props {
   onOpenResearchAgent: () => void;
   onOpenResearchMcp: () => void;
   onOpenTicTacToe: () => void;
+  onOpenWorkflows: () => void;
 }
 
 export function ThreadSidebar({
@@ -63,6 +64,7 @@ export function ThreadSidebar({
   onOpenResearchAgent,
   onOpenResearchMcp,
   onOpenTicTacToe,
+  onOpenWorkflows,
 }: Props) {
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -176,6 +178,9 @@ export function ThreadSidebar({
           </button>
           <button className="btn-tictactoe" type="button" onClick={onOpenTicTacToe}>
             🎮 Game
+          </button>
+          <button className="btn-workflows" type="button" onClick={onOpenWorkflows}>
+            ⚡ Workflows
           </button>
         </div>
         <div className="sidebar-footer-user">

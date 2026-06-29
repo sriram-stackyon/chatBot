@@ -114,6 +114,11 @@ class Settings(BaseSettings):
         ),
     )
 
+    # N8N integration — shared secret for the digest endpoint
+    N8N_API_KEY: str = Field("", validation_alias="N8N_API_KEY")
+    # N8N outgoing webhook URL (trigger workflows from the dashboard)
+    N8N_WEBHOOK_URL: str = Field("", validation_alias="N8N_WEBHOOK_URL")
+
     def get_auth_secret(self) -> str:
         if self.AUTH_SECRET_KEY:
             if len(self.AUTH_SECRET_KEY.encode("utf-8")) >= 32:

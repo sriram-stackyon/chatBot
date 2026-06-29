@@ -26,6 +26,7 @@ interface ChatPageProps {
   onOpenResearchAgent: () => void;
   onOpenResearchMcp: () => void;
   onOpenTicTacToe: () => void;
+  onOpenWorkflows: () => void;
 }
 
 function toThreadModel(item: {
@@ -77,7 +78,7 @@ function toMessageModel(item: {
   };
 }
 
-export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, onOpenResearchAgent, onOpenResearchMcp, onOpenTicTacToe }: ChatPageProps) {
+export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, onOpenResearchAgent, onOpenResearchMcp, onOpenTicTacToe, onOpenWorkflows }: ChatPageProps) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -402,6 +403,7 @@ export function ChatPage({ accessToken, userEmail, onSignOut, onOpenSheetAgent, 
         onOpenResearchAgent={onOpenResearchAgent}
         onOpenResearchMcp={onOpenResearchMcp}
         onOpenTicTacToe={onOpenTicTacToe}
+        onOpenWorkflows={onOpenWorkflows}
       />
 
       <main className="chat-main">

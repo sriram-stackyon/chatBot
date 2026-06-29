@@ -7,8 +7,9 @@ import { ResearchAgentPage } from './pages/ResearchAgentPage';
 import { ResearchMcpPage } from './pages/ResearchMcpPage';
 import { SheetAgentPage } from './pages/SheetAgentPage';
 import { TicTacToePage } from './pages/TicTacToePage';
+import { WorkflowsPage } from './pages/WorkflowsPage';
 
-type AppView = 'chat' | 'sheets' | 'research' | 'research-mcp' | 'tictactoe';
+type AppView = 'chat' | 'sheets' | 'research' | 'research-mcp' | 'tictactoe' | 'workflows';
 
 export default function App() {
   const { session, loading, error, signIn, signUp, signInWithGoogle, signOut } = useAuth();
@@ -71,6 +72,16 @@ export default function App() {
     );
   }
 
+  if (view === 'workflows') {
+    return (
+      <WorkflowsPage
+        accessToken={session.access_token}
+        userEmail={email}
+        onBack={() => setView('chat')}
+      />
+    );
+  }
+
   return (
     <ChatPage
       accessToken={session.access_token}
@@ -80,6 +91,7 @@ export default function App() {
       onOpenResearchAgent={() => setView('research')}
       onOpenResearchMcp={() => setView('research-mcp')}
       onOpenTicTacToe={() => setView('tictactoe')}
+      onOpenWorkflows={() => setView('workflows')}
     />
   );
 }

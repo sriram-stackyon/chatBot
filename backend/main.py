@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.game import router as game_router
+from app.api.n8n_digest import router as n8n_digest_router
 from app.api.research import router as research_router
 from app.api.research_mcp import router as research_mcp_router
 from app.api.sheets import router as sheets_router
@@ -15,6 +16,7 @@ from app.api.sql_chat import router as sql_chat_router
 from app.api.routes.export_routes import router as export_router
 from app.api.routes.rag_routes import router as rag_router
 from app.api.routes.token_routes import router as token_router
+from app.api.routes.workflow_routes import router as workflow_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.rate_limit import RateLimitMiddleware
@@ -52,6 +54,8 @@ app.include_router(game_router, prefix="/api")
 app.include_router(export_router, prefix="/api")
 app.include_router(rag_router, prefix="/api")
 app.include_router(token_router, prefix="/api")
+app.include_router(n8n_digest_router, prefix="/api")
+app.include_router(workflow_router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])
